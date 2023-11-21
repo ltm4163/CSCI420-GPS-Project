@@ -1,6 +1,7 @@
 import pynmea2
 import simplekml
 import pandas as pd
+from math import radians, sin, cos, sqrt, atan2
 
 
 def read_gps_data(file_path):
@@ -9,7 +10,6 @@ def read_gps_data(file_path):
 
 
 def parse_gps_data(nmea_lines):
-
     data = {'Timestamp': [], 'Latitude': [], 'Longitude': [], 'Speed': [], 'Elevation': []}
     elevation = None  # Initialize elevation
     last_position = None  # Store the last position to check for duplicates
@@ -30,7 +30,8 @@ def parse_gps_data(nmea_lines):
                 longitude = msg.longitude
 
                 # Check if a new path is starting or if the location is significantly different
-                if start_new_path or (last_position is not None and (latitude, longitude) != last_position):
+                if start_new_path or (
+                        last_position is not None and (latitude, longitude) != last_position) and speed > 10:
                     # Append data to the dictionary
                     data['Timestamp'].append(timestamp)
                     data['Latitude'].append(latitude)
@@ -67,12 +68,20 @@ def convert_to_kml(gps_dataframe):
         if True:  # Add your condition here if needed
             # Check if current_path_coords is not empty before accessing its last element
             if current_path_coords:
-                # Compare altitudes to determine uphill or downhill
-                if altitude > current_path_coords[-1][2] and current_speed_over_ground > 10:
-                    new_path_color = 'ff0000ff'  # Red for uphill
-                else:
-                    new_path_color = '7f00ffff'  # Yellow for flat or downhill
+                # Calculate slope (grade)
+                previous_altitude = current_path_coords[-1][2]
+                distance = haversine((latitude, longitude), (current_path_coords[-1][0], current_path_coords[-1][1]))
 
+                if distance > 0:
+                    grade = ((altitude - previous_altitude) / distance) * 100  # Slope in percentage
+                    # Compare slope to determine uphill (10% grade or higher)
+                    if grade >= 1 and current_speed_over_ground > 10:
+                        new_path_color = 'ff0000ff'  # Red for uphill
+                    else:
+                        new_path_color = '7f00ffff'  # Yellow for flat or downhill
+                else:
+                    new_path_color = '7f00ffff'  # Assume flat if distance is zero
+                # Compare altitudes to determine uphill or downhill
                 if new_path_color != current_path_color:
                     linestring = kml.newlinestring(name="Path", description="GPS Path")
                     linestring.style.linestyle.color = current_path_color
@@ -95,11 +104,27 @@ def convert_to_kml(gps_dataframe):
 
     kml.save("output.kml")
 
+
+def haversine(coord1, coord2):
+    # Calculate the haversine distance between two coordinates in kilometers
+    lat1, lon1 = radians(coord1[0]), radians(coord1[1])
+    lat2, lon2 = radians(coord2[0]), radians(coord2[1])
+
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+
+    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    distance = 6371 * c  # Earth radius in kilometers
+
+    return distance
+
+
 def main():
-    file_path = '2023_August_Sept_Oct_GPS_FILES/2023_08_01__233842_gps_file.txt'
+    file_path = '2023_August_Sept_Oct_GPS_FILES/2023_08_02__183833_gps_file.txt'
     raw_data = read_gps_data(file_path)
     filtered_data = parse_gps_data(raw_data)
-    print(filtered_data) # for bug testing
+    print(filtered_data)  # for bug testing
     convert_to_kml(filtered_data)
 
 
