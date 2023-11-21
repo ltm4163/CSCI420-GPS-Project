@@ -1,69 +1,70 @@
 import pynmea2
 import simplekml
-from simplekml import Style
+import datetime
+import math
 
 def read_gps_data(file_path):
     with open(file_path, 'r') as file:
         return file.readlines()
 
 def filter_gps_data(raw_data):
-    filtered_data = [line for line in raw_data if "$GPRMC" in line or "$GPGGA" in line]
-    return filtered_data
+    return [line for line in raw_data if "$GPRMC" in line or "$GPGGA" in line]
 
 def convert_to_kml(gps_data):
     kml = simplekml.Kml()
-
-    current_path_color = '7f00ffff'  # Yellow by default
+    current_path_color, current_speed_over_ground = '7f00ffff', 0
     current_path_coords = []
-    current_speed_over_ground = 0
+    # previous_time = None
 
     for line in gps_data:
         if "$GPRMC" in line:
             try:
-                msg = pynmea2.parse(line)
-                current_speed_over_ground = msg.spd_over_grnd
+                current_speed_over_ground = pynmea2.parse(line).spd_over_grnd
             except pynmea2.ParseError as e:
-                print('Parse error (RMC): {}'.format(e))
+                print(f'Parse error (RMC): {e}')
                 continue
         elif "$GPGGA" in line:
             try:
                 msg = pynmea2.parse(line)
-                latitude = msg.latitude
-                longitude = msg.longitude
-                altitude = msg.altitude
+                latitude, longitude, altitude = msg.latitude, msg.longitude, msg.altitude
 
-                if True:
-                    # Check if current_path_coords is not empty before accessing its last element
-                    if current_path_coords:
-                        # Compare altitudes to determine uphill or downhill
-                        if altitude > current_path_coords[-1][2] and current_speed_over_ground > 10:
-                            new_path_color = 'ff0000ff'  # Red for uphill
-                        else:
-                            new_path_color = '7f00ffff'  # Yellow for flat or downhill
+                # time = datetime.datetime.combine(datetime.date.today(), msg.timestamp)
+                # if previous_time is not None:
+                #     diff = time - previous_time
+                #     print(diff.total_seconds())
+                # previous_time = time
 
-                        if new_path_color != current_path_color:
-                            linestring = kml.newlinestring(name="Path", description="GPS Path")
-                            linestring.style.linestyle.color = current_path_color
-                            linestring.coords.addcoordinates(current_path_coords)
 
-                            linestring.altitudemode = simplekml.AltitudeMode.relativetoground
-                            linestring.extrude = 1
+                if current_path_coords:
+                    if altitude > current_path_coords[-1][2] and abs(altitude-current_path_coords[-1][2]) > 0.2 and current_speed_over_ground > 10:
+                        new_path_color = 'ff0000ff'  # Red for uphill
+                    else:
+                        new_path_color = '7f00ffff'  # Yellow for flat or downhill
 
-                            current_path_coords = [(longitude, latitude, altitude)]
-                            current_path_color = new_path_color
-                        else:
-                            current_path_coords.append((longitude, latitude, altitude))
+                    if new_path_color != current_path_color:
+                        linestring = kml.newlinestring(name="Path", description="GPS Path")
+                        linestring.style.linestyle.color = current_path_color
+                        linestring.coords.addcoordinates(current_path_coords)
+                        linestring.altitudemode = simplekml.AltitudeMode.relativetoground
+                        linestring.extrude = 1
+
+                        current_path_coords = [(longitude, latitude, altitude)]
+                        current_path_color = new_path_color
                     else:
                         current_path_coords.append((longitude, latitude, altitude))
+                else:
+                    current_path_coords.append((longitude, latitude, altitude))
 
             except pynmea2.ParseError as e:
-                print('Parse error: {}'.format(e))
+                print(f'Parse error: {e}')
                 continue
 
     if current_path_coords:
         linestring = kml.newlinestring(name="Path", description="GPS Path")
         linestring.style.linestyle.color = current_path_color
         linestring.coords.addcoordinates(current_path_coords)
+        linestring.altitudemode = simplekml.AltitudeMode.relativetoground
+        linestring.extrude = 1
 
     kml.save("output.kml")
 
@@ -75,6 +76,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
