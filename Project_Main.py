@@ -1,3 +1,8 @@
+"""
+Names:
+Project CSCI-420
+"""
+
 import pynmea2
 import simplekml
 import datetime
